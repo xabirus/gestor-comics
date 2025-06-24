@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Gestor de Cómics</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    label { display: block; margin-top: 10px; }
+    input, select, button { margin-top: 5px; display: block; }
+    .coleccion { margin-top: 20px; padding: 10px; border: 1px solid #ccc; border-radius: 10px; }
+    .coleccion h3 { margin-bottom: 10px; }
+    .coleccion h4 { margin-bottom: 5px; margin-left: 20px; }
+    .estado-texto { font-weight: bold; }
+    .estado-realizado { color: orange; }
+    .estado-tienda { color: steelblue; }
+    .estado-recibido { color: seagreen; }
+    .botones { display: flex; gap: 5px; margin-top: 5px; }
+  </style>
+  <!-- Firebase -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getFirestore, collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyD5hasVRtSOEzMffIZqR3hnBj3Q2G0XTVU",
+      authDomain: "gestor-comics.firebaseapp.com",
+      projectId: "gestor-comics",
+      storageBucket: "gestor-comics.firebasestorage.app",
+      messagingSenderId: "90236265815",
+      appId: "1:90236265815:web:ee35129488954958470a12"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const editorialSelect = document.getElementById("editorial");
+    const tituloSelect = document.getElementById("titulo");
+
+    async function cargarComics() {
+      const snapshot = await getDocs(collection(db, "comics"));
+      const lista = [];
+      snapshot.forEach(doc => lista.push({ id: doc.id, ...doc.data() }));
+      return lista;
+    }
+
+    async function guardarComic(comic) {
+      await addDoc(collection(db, "comics"), comic);
+    }
+
+    async function borrarComic(id) {
+      await deleteDoc(doc(db, "comics", id));
+    }
+
+    function estadoTexto(estado) {
+      switch (estado) {
+        case "realizado": return "Pedido realizado";
+        case "tienda": return "Pedido en tienda";
+        case "recibido": return "Pedido recibido";
+        default: return "";
+      }
+    }
+
+    function aplicarColor(estado) {
+      return `estado-texto estado-${estado}`;
+    }
+
+    function renderizar(comics) {
+      const lista = document.getElementById("lista");
+      lista.innerHTML = "";
+
+      const agrupado = {};
+      comics.forEach(c => {
+        if (!agrupado[c.editorial]) agrupado[c.editorial] = {};
+        if (!agrupado[c.editorial][c.titulo]) agrupado[c.editorial][c.titulo] = [];
+        agrupado[c.editorial][c.titulo].push(c);
+      });
+
+      const editoriales = Object.keys(agrupado).sort();
+      editoriales.forEach(editorial => {
+        const contEd = document.createElement("div");
+        contEd.className = "coleccion";
+        contEd.innerHTML = `<h3>${editorial}</h3>`;
+
+        const titulos = Object.keys(agrupado[editorial]).sort();
+        titulos.forEach(titulo => {
+          const contTit = document.createElement("div");
+          contTit.innerHTML = `<h4>${titulo}</h4>`;
+          agrupado[editorial][titulo].sort((a, b) => a.numero - b.numero).forEach(c => {
+            const div = document.createElement("div");
+            div.innerHTML = `
+              Nº ${c.numero}${c.total && c.total !== "indefinido" ? ` de ${c.total}` : ""} — ${c.fecha} — <span class="${aplicarColor(c.estado)}">${estadoTexto(c.estado)}</span>
+            `;
+            const botones = document.createElement("div");
+            botones.className = "botones";
+            const btnEdit = document.createElement("button");
+            btnEdit.textContent = "Editar";
+            const btnDelete = document.createElement("button");
+            btnDelete.textContent = "Eliminar";
+
+            btnDelete.onclick = async () => {
+              await borrarComic(c.id);
+              iniciar();
+            };
+
+            botones.appendChild(btnEdit);
+            botones.appendChild(btnDelete);
+            div.appendChild(botones);
+            contTit.appendChild(div);
+          });
+          contEd.appendChild(contTit);
+        });
+        lista.appendChild(contEd);
+      });
+    }
+
+    async function iniciar() {
+      const comics = await cargarComics();
+      renderizar(comics);
+    }
+
+    document.getElementById("agregar").onclick = async () => {
+      const editorial = document.getElementById("editorial").value.trim();
+      const titulo = document.getElementById("titulo").value.trim();
+      const numero = parseInt(document.getElementById("numero").value);
+      const total = document.getElementById("total").value.trim();
+      const fecha = document.getElementById("fecha").value;
+      const estado = document.getElementById("estado").value;
+
+      if (!editorial || !titulo || !numero || !fecha || !estado) {
+        alert("Faltan datos obligatorios");
+        return;
+      }
+
+      await guardarComic({ editorial, titulo, numero, total, fecha, estado });
+      iniciar();
+    };
+
+    // Establecer fecha por defecto
+    document.getElementById("fecha").valueAsDate = new Date();
+
+    iniciar();
+  </script>
+</head>
+<body>
+  <h2>Gestor de Cómics</h2>
+
+  <label>Editorial: <input type="text" id="editorial"></label>
+  <label>Título: <input type="text" id="titulo"></label>
+  <label>Número: <input type="number" id="numero" min="1"></label>
+  <label>Total de números (opcional): <input type="text" id="total"></label>
+  <label>Fecha de pedido: <input type="date" id="fecha"></label>
+  <label>Estado del pedido:
+    <select id="estado">
+      <option value="">Selecciona...</option>
+      <option value="realizado">Pedido realizado</option>
+      <option value="tienda">Pedido en tienda</option>
+      <option value="recibido">Pedido recibido</option>
+    </select>
+  </label>
+  <button id="agregar">Agregar cómic</button>
+
+  <div id="lista"></div>
+</body>
+</html>
